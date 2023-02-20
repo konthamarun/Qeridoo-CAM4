@@ -1,0 +1,119 @@
+
+#include <Arduino.h>
+#include <SD.h> 
+#include <esp_camera.h> 
+#include <esp_timer.h> 
+
+
+uint32_t us;
+bool recording;
+
+void setup() {
+  Serial.begin(115200); 
+  camera_config_t config; 
+  config.ledc_channel = LEDC_CHANNEL_0; 
+  config.ledc_timer = LEDC_TIMER_0; 
+  config.pin_d0 = 27;
+  config.pin_d1 = 14;
+  config.pin_d2 = 26;
+  config.pin_d3 = 25;
+  config.pin_d4 = 33;
+  config.pin_d5 = 32;
+  config.pin_d6 = 35;
+  config.pin_d7 = 34;
+  config.pin_xclk = 21; 
+  config.pin_pclk = 22;
+  config.pin_vsync = 17; 
+  config.pin_href = 23;
+  config.pin_sscb_sda = 19;
+  config.pin_sscb_scl = 18; 
+  config.pin_reset = 16; 
+  config.xclk_freq_hz = 20000000; 
+  config.pixel_format = PIXFORMAT_JPEG;
+  config.frame_size = FRAMESIZE_SVGA; 
+  config.jpeg_quality = 10; 
+  config.fb_count = 1;
+ 
+  // Camera init
+  esp_err_t err = esp_camera_init(&config);
+  if (err != ESP_OK) {
+    Serial.printf("Camera init failed with error 0x%x", err);
+    return;
+  }
+
+  // SD Card Init
+  SD.begin(PIN_NUM_MOSI, PIN_NUM_MISO, PIN_NUM_CLK, PIN_NUM_CS); 
+  Serial.println("SD Card Initialization done.");
+  
+  // Ultrasonic Sensor Init
+  pinMode(ULTRA_TRIG_PIN, OUTPUT);
+  pinMode(ULTRA_ECHO_PIN, INPUT);
+ 
+  // Setting recording as false
+  recording = false;
+}
+
+void loop() {
+  // Triggering the ultrasonic sensor
+  digitalWrite(ULTRA_TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(ULTRA_TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(ULTRA_TRIG_PIN, LOW);
+
+  // Calculating the time taken for the ultrasonic pulse to travel and come back
+  us = pulseIn(ULTRA_ECHO_PIN, HIGH);
+ counter++;  
+if(counter ==1000)
+{
+  us=0;
+}
+  // Checking if the value of us is greater than 25
+  if (us > 25) {
+    // If yes, then start recording video
+    if (!recording) { 
+      camera_fb_t *fb = NULL;
+      Serial.println("Start recording video");
+
+      // Creating file for saving video
+      File video = SD.open("test.avi", FILE_WRITE);
+      if (!video) {
+        Serial.println("Failed to open video file");
+        return;
+      }
+      recording = true;
+
+      while (us > 25) {
+        // Capturing the frame
+        fb = esp_camera_fb_get();
+        if (!fb) {
+          Serial.println("Camera capture failed");
+          return;
+        }
+
+        // Writing the frame to the video file
+        video.write(fb->buf, fb->len);
+
+        // Releasing the frame 
+        esp_camera_fb_return(fb);
+
+        // Triggering the ultrasonic sensor again
+        digitalWrite(ULTRA_TRIG_PIN, LOW);
+
+        delayMicroseconds(2); 
+        digitalWrite(ULTRA_TRIG_PIN, HIGH);
+        delayMicroseconds(10); 
+        digitalWrite(ULTRA_TRIG_PIN, LOW);
+
+        // Calculating the time taken for the ultrasonic pulse to travel and come back
+        us = pulseIn(ULTRA_ECHO_PIN, HIGH);
+      }
+
+      // Closing the file
+      video.close();
+
+      // Setting recording as false
+      recording = false;
+    }
+  }
+}
